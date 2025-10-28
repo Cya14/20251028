@@ -24,7 +24,7 @@ if uploaded_file is not None:
         st.error(f"❌ CSV 열이 정확히 다음과 같아야 합니다:\n{', '.join(expected_cols)}")
         st.stop()
 
-    # 🔹 year를 숫자로 변환
+    # 🔹 year 숫자로 변환
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
     df = df[df["year"].notna() & (df["year"] >= 2012)]
 
@@ -32,10 +32,13 @@ if uploaded_file is not None:
     df["month"] = df["month"].astype(str).str.zfill(2)
     df["year_month"] = df["year"].astype(int).astype(str) + "-" + df["month"]
 
-    # 🔹 Flight / Passengers / Cargo 모든 열 숫자로 변환, NaN -> 0
-    for col in ["Flight Arrival", "Flight Departure", "Flight Total",
+    # 🔹 모든 숫자 열 쉼표 제거 후 숫자 변환, NaN → 0
+    num_cols = ["Flight Arrival", "Flight Departure", "Flight Total",
                 "Passengers Arrival", "Passengers Departure", "Passengers Total",
-                "Cargo Arrival", "Cargo Departure", "Cargo Total"]:
+                "Cargo Arrival", "Cargo Departure", "Cargo Total"]
+
+    for col in num_cols:
+        df[col] = df[col].astype(str).str.replace(",", "").str.strip()
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     # 🔹 Flight 비율 계산
