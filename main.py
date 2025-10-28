@@ -69,73 +69,50 @@ if uploaded_file is not None:
     # 기간 필터링
     df_filtered = df[(df["year_month"] >= start_period) & (df["year_month"] <= end_period)]
 
-    # 🔹 시각화 선택 옵션
-    st.sidebar.header("⚙️ 그래프 설정")
-    category = st.sidebar.selectbox("데이터 종류", ["Flight", "Passengers", "Cargo"])
-    view_mode = st.sidebar.selectbox("표시할 데이터", ["이착륙 비율", "이착륙 횟수"])
+    # 🔹 원 그래프: Flight / Passengers / Cargo (선택 기간 마지막 달 기준)
+    st.header("🔹 각 카테고리 이착륙 비율 (선택 기간 마지막 달 기준)")
+    latest = df_filtered.iloc[-1]  # 마지막 달 데이터
 
-    # 🔹 차트 데이터 선택
-    if category == "Flight":
-        if view_mode == "이착륙 비율":
-            chart_data = df_filtered[["year_month", "Flight arrival_ratio", "Flight departure_ratio"]].melt(
-                "year_month", var_name="Type", value_name="Ratio")
-            chart_data["Ratio"] = chart_data["Ratio"].astype(float)
-            y_field = "Ratio"
-            y_title = "비율"
-            color_scheme = "set2"
-        else:
-            chart_data = df_filtered[["year_month", "Flight Arrival", "Flight Departure"]].melt(
-                "year_month", var_name="Type", value_name="Count")
-            chart_data["Count"] = chart_data["Count"].astype(float)
-            y_field = "Count"
-            y_title = "횟수"
-            color_scheme = "category10"
-    elif category == "Passengers":
-        if view_mode == "이착륙 비율":
-            chart_data = df_filtered[["year_month", "Passengers arrival_ratio", "Passengers departure_ratio"]].melt(
-                "year_month", var_name="Type", value_name="Ratio")
-            chart_data["Ratio"] = chart_data["Ratio"].astype(float)
-            y_field = "Ratio"
-            y_title = "비율"
-            color_scheme = "set2"
-        else:
-            chart_data = df_filtered[["year_month", "Passengers Arrival", "Passengers Departure"]].melt(
-                "year_month", var_name="Type", value_name="Count")
-            chart_data["Count"] = chart_data["Count"].astype(float)
-            y_field = "Count"
-            y_title = "횟수"
-            color_scheme = "category10"
-    else:  # Cargo
-        if view_mode == "이착륙 비율":
-            chart_data = df_filtered[["year_month", "Cargo arrival_ratio", "Cargo departure_ratio"]].melt(
-                "year_month", var_name="Type", value_name="Ratio")
-            chart_data["Ratio"] = chart_data["Ratio"].astype(float)
-            y_field = "Ratio"
-            y_title = "비율"
-            color_scheme = "set2"
-        else:
-            chart_data = df_filtered[["year_month", "Cargo Arrival", "Cargo Departure"]].melt(
-                "year_month", var_name="Type", value_name="Count")
-            chart_data["Count"] = chart_data["Count"].astype(float)
-            y_field = "Count"
-            y_title = "횟수"
-            color_scheme = "category10"
+    col1, col2, col3 = st.columns(3)
 
-    # 🔹 Altair 차트 생성
-    chart = (
-        alt.Chart(chart_data)
-        .mark_line(point=True)
-        .encode(
-            x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y(f"{y_field}:Q", title=y_title),
-            color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
-            tooltip=["year_month", "Type", y_field]
+    with col1:
+        st.subheader("Flight")
+        flight_data = pd.DataFrame({
+            'Type': ['Arrival', 'Departure'],
+            'Ratio': [latest['Flight arrival_ratio'], latest['Flight departure_ratio']]
+        })
+        flight_chart = alt.Chart(flight_data).mark_arc().encode(
+            theta=alt.Theta(field="Ratio", type="quantitative"),
+            color=alt.Color(field="Type", type="nominal"),
+            tooltip=["Type", alt.Tooltip("Ratio", format=".2%")]
         )
-        .properties(width=900, height=450)
-        .interactive()
-    )
+        st.altair_chart(flight_chart, use_container_width=True)
 
-    st.altair_chart(chart, use_container_width=True)
+    with col2:
+        st.subheader("Passengers")
+        passenger_data = pd.DataFrame({
+            'Type': ['Arrival', 'Departure'],
+            'Ratio': [latest['Passengers arrival_ratio'], latest['Passengers departure_ratio']]
+        })
+        passenger_chart = alt.Chart(passenger_data).mark_arc().encode(
+            theta=alt.Theta(field="Ratio", type="quantitative"),
+            color=alt.Color(field="Type", type="nominal"),
+            tooltip=["Type", alt.Tooltip("Ratio", format=".2%")]
+        )
+        st.altair_chart(passenger_chart, use_container_width=True)
+
+    with col3:
+        st.subheader("Cargo")
+        cargo_data = pd.DataFrame({
+            'Type': ['Arrival', 'Departure'],
+            'Ratio': [latest['Cargo arrival_ratio'], latest['Cargo departure_ratio']]
+        })
+        cargo_chart = alt.Chart(cargo_data).mark_arc().encode(
+            theta=alt.Theta(field="Ratio", type="quantitative"),
+            color=alt.Color(field="Type", type="nominal"),
+            tooltip=["Type", alt.Tooltip("Ratio", format=".2%")]
+        )
+        st.altair_chart(cargo_chart, use_container_width=True)
 
 else:
     st.info("👆 CSV 파일을 업로드하면 분석이 시작됩니다.")
