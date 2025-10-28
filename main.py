@@ -13,8 +13,14 @@ uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 
-    # 🔹 정확한 열 확인 (대소문자 포함 그대로)
-    expected_cols = ["year", "month", "Flight", "Arrival", "Departure", "Total", "Cargo", "Passengers"]
+    # 🔹 정확한 열 확인
+    expected_cols = [
+        "year", "month",
+        "Flight Arrival", "Flight Departure", "Flight Total",
+        "Passengers Arrival", "Passengers Departure", "Passengers Total",
+        "Cargo Arrival", "Cargo Departure", "Cargo Total"
+    ]
+
     if list(df.columns) != expected_cols:
         st.error(f"❌ CSV 열이 정확히 다음과 같아야 합니다:\n{', '.join(expected_cols)}")
         st.stop()
@@ -22,26 +28,30 @@ if uploaded_file is not None:
     # 🔹 2012년 이후 데이터만 필터링
     df = df[df["year"] >= 2012]
 
-    # 🔹 월을 문자열로 변환 (보기 좋게)
+    # 🔹 월을 문자열로 변환
     df["month"] = df["month"].astype(str).str.zfill(2)
     df["year_month"] = df["year"].astype(str) + "-" + df["month"]
 
-    # 🔹 비율 계산
-    df["total_flights"] = df["Arrival"] + df["Departure"]
-    df["arrival_ratio"] = df["Arrival"] / df["total_flights"]
-    df["departure_ratio"] = df["Departure"] / df["total_flights"]
+    # 🔹 Flight 이착륙 비율 계산
+    df["Flight total_flights"] = df["Flight Arrival"] + df["Flight Departure"]
+    df["Flight arrival_ratio"] = df["Flight Arrival"] / df["Flight total_flights"]
+    df["Flight departure_ratio"] = df["Flight Departure"] / df["Flight total_flights"]
 
     # 🔹 시각화 선택 옵션
     st.sidebar.header("⚙️ 그래프 설정")
-    view_mode = st.sidebar.selectbox("표시할 데이터", ["이착륙 비율", "이착륙 횟수"])
+    view_mode = st.sidebar.selectbox("표시할 데이터", ["Flight 이착륙 비율", "Flight 이착륙 횟수"])
 
     # 🔹 데이터 선택
-    if view_mode == "이착륙 비율":
-        chart_data = df[["year_month", "arrival_ratio", "departure_ratio"]].melt("year_month", var_name="Type", value_name="Ratio")
+    if view_mode == "Flight 이착륙 비율":
+        chart_data = df[["year_month", "Flight arrival_ratio", "Flight departure_ratio"]].melt(
+            "year_month", var_name="Type", value_name="Ratio"
+        )
         y_title = "비율"
         color_scheme = "set2"
     else:
-        chart_data = df[["year_month", "Arrival", "Departure"]].melt("year_month", var_name="Type", value_name="Count")
+        chart_data = df[["year_month", "Flight Arrival", "Flight Departure"]].melt(
+            "year_month", var_name="Type", value_name="Count"
+        )
         y_title = "횟수"
         color_scheme = "category10"
 
