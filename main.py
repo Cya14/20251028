@@ -1,134 +1,74 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-import io
 
-# -------------------------------
-# 페이지 기본 설정
-# -------------------------------
-st.set_page_config(page_title="인천공항 이·착륙 분석", layout="centered")
-st.title("✈ 인천국제공항 이·착륙 통계 시각화")
-st.caption("Altair 기반 자동 분석 (2012년 이후 데이터 기준)")
+st.set_page_config(page_title="인천공항 이착륙 비율 대시보드", layout="wide")
 
-# -------------------------------
-# 파일 업로드
-# -------------------------------
-uploaded = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"])
-if not uploaded:
-    st.stop()
+st.title("✈️ 인천공항 이착륙 비율 시각화")
+st.markdown("CSV 파일을 업로드하면, 인천공항의 연도별 이착륙 비율을 시각적으로 보여줍니다.")
 
-# CSV 읽기
-try:
-    df = pd.read_csv(uploaded)
-except Exception:
-    df = pd.read_csv(uploaded, encoding="cp949")
+# 🔹 파일 업로드
+uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"])
 
-st.success("✅ 파일 불러오기 완료!")
-st.dataframe(df.head())
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
 
-# -------------------------------
-# 컬럼 이름 자동 표준화
-# -------------------------------
-df.columns = [c.strip().lower() for c in df.columns]
+    # 🔹 모든 열 이름을 소문자로 통일
+    df.columns = df.columns.str.lower().str.strip()
 
-expected_cols = ["year", "month", "flight", "passenger", "cargo", "arrive", "departure", "total"]
-missing = [c for c in expected_cols if c not in df.columns]
-if missing:
-    st.error(f"❌ 다음 필수 컬럼이 누락되어 있습니다: {missing}")
-    st.stop()
+    # 🔹 열 존재 여부 확인
+    required_cols = ["year", "month", "flight", "passengers", "cargo", "arrival", "departure", "total"]
+    missing_cols = [col for col in required_cols if col not in df.columns]
 
-# -------------------------------
-# 데이터 전처리
-# -------------------------------
-df = df.copy()
-for c in ["year", "month"]:
-    df[c] = pd.to_numeric(df[c], errors="coerce")
+    if missing_cols:
+        st.error(f"❌ 다음 열이 없습니다: {missing_cols}")
+        st.stop()
 
-# 2012년 이후 데이터만
-df = df[df["year"] >= 2012].sort_values(["year", "month"])
+    # 🔹 2012년 이후 데이터만 필터링
+    df = df[df["year"] >= 2012]
 
-# 숫자형 컬럼 변환
-for c in ["flight", "passenger", "cargo", "arrive", "departure", "total"]:
-    df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+    # 🔹 월을 문자열로 변환 (보기 좋게)
+    df["month"] = df["month"].astype(str).str.zfill(2)
+    df["year_month"] = df["year"].astype(str) + "-" + df["month"]
 
-# 연월 문자열
-df["년월"] = df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2)
+    # 🔹 비율 계산
+    df["total_flights"] = df["arrival"] + df["departure"]
+    df["arrival_ratio"] = df["arrival"] / df["total_flights"]
+    df["departure_ratio"] = df["departure"] / df["total_flights"]
 
-# -------------------------------
-# 시각화 1: 월별 이·착륙 추이
-# -------------------------------
-st.subheader("📈 월별 이·착륙 추이")
+    # 🔹 시각화 선택 옵션
+    st.sidebar.header("⚙️ 그래프 설정")
+    view_mode = st.sidebar.selectbox("표시할 데이터", ["이착륙 비율", "이착륙 횟수"])
 
-trend = (
-    alt.Chart(df)
-    .transform_fold(["arrive", "departure"], as_=["구분", "편수"])
-    .mark_line(point=True)
-    .encode(
-        x=alt.X("년월:N", sort=None, title=None),
-        y=alt.Y("편수:Q", title="편수"),
-        color=alt.Color("구분:N", title="구분", scale=alt.Scale(scheme="set1")),
-        tooltip=["year", "month", "구분", "편수"]
+    # 🔹 데이터 선택
+    if view_mode == "이착륙 비율":
+        chart_data = df[["year_month", "arrival_ratio", "departure_ratio"]].melt("year_month", var_name="Type", value_name="Ratio")
+        y_title = "비율"
+        color_scheme = "set2"
+    else:
+        chart_data = df[["year_month", "arrival", "departure"]].melt("year_month", var_name="Type", value_name="Count")
+        y_title = "횟수"
+        color_scheme = "category10"
+
+    # 🔹 Altair 그래프 생성
+    chart = (
+        alt.Chart(chart_data)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
+            y=alt.Y(f"value:Q", title=y_title),
+            color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
+            tooltip=["year_month", "Type", "value"]
+        )
+        .properties(width=900, height=450)
+        .interactive()
     )
-    .properties(height=400, title="월별 이·착륙 추이 (2012년 이후)")
-)
-st.altair_chart(trend, use_container_width=True)
 
-# -------------------------------
-# 시각화 2: 최신 연도 이·착륙 비율 도넛
-# -------------------------------
-latest_year = int(df["year"].max())
-st.subheader(f"🍩 {latest_year}년 이·착륙 비율")
+    st.altair_chart(chart, use_container_width=True)
 
-latest = df[df["year"] == latest_year]
-sum_arrive = latest["arrive"].sum()
-sum_depart = latest["departure"].sum()
+    # 🔹 데이터 미리보기
+    with st.expander("📄 데이터 미리보기"):
+        st.dataframe(df.head())
 
-donut_df = pd.DataFrame({
-    "구분": ["도착(arrive)", "출발(departure)"],
-    "편수": [sum_arrive, sum_depart]
-})
-
-donut = (
-    alt.Chart(donut_df)
-    .mark_arc(innerRadius=60)
-    .encode(
-        theta="편수:Q",
-        color=alt.Color("구분:N", scale=alt.Scale(scheme="set2")),
-        tooltip=["구분", "편수"]
-    )
-    .properties(width=400, height=400, title=f"{latest_year}년 이·착륙 비율")
-)
-st.altair_chart(donut, use_container_width=True)
-st.metric(f"{latest_year}년 총편수", f"{(sum_arrive + sum_depart):,}편")
-
-# -------------------------------
-# 시각화 3: 월별 총편수 막대 그래프
-# -------------------------------
-st.subheader(f"📊 {latest_year}년 월별 총편수")
-
-bar = (
-    alt.Chart(latest)
-    .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
-    .encode(
-        x=alt.X("month:O", title="월"),
-        y=alt.Y("total:Q", title="총편수"),
-        color=alt.Color("month:O", scale=alt.Scale(scheme="blues")),
-        tooltip=["year", "month", "total"]
-    )
-    .properties(height=400, title=f"{latest_year}년 월별 총편수")
-)
-st.altair_chart(bar, use_container_width=True)
-
-# -------------------------------
-# 데이터 확인 및 다운로드
-# -------------------------------
-with st.expander("📂 데이터 확인"):
-    st.dataframe(df.tail())
-
-csv_buf = df.to_csv(index=False).encode("utf-8-sig")
-st.download_button(
-    "🔽 처리된 데이터 다운로드 (CSV)",
-    data=csv_buf,
-    file_name="incheon_airport_processed.csv",
-    mime="text/csv"
-)
+else:
+    st.info("👆 CSV 파일을 업로드하면 분석이 시작됩니다.")
