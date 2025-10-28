@@ -25,12 +25,13 @@ if uploaded_file is not None:
         st.error(f"❌ CSV 열이 정확히 다음과 같아야 합니다:\n{', '.join(expected_cols)}")
         st.stop()
 
-    # 🔹 2012년 이후 데이터만 필터링
-    df = df[df["year"] >= 2012]
+    # 🔹 year를 숫자로 변환 (변환 불가 시 NaN 처리)
+    df["year"] = pd.to_numeric(df["year"], errors="coerce")
+    df = df[df["year"].notna() & (df["year"] >= 2012)]
 
     # 🔹 월을 문자열로 변환
     df["month"] = df["month"].astype(str).str.zfill(2)
-    df["year_month"] = df["year"].astype(str) + "-" + df["month"]
+    df["year_month"] = df["year"].astype(int).astype(str) + "-" + df["month"]
 
     # 🔹 Flight 이착륙 비율 계산
     df["Flight total_flights"] = df["Flight Arrival"] + df["Flight Departure"]
