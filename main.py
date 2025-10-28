@@ -33,8 +33,15 @@ if uploaded_file is not None:
     df["month"] = df["month"].astype(str).str.zfill(2)
     df["year_month"] = df["year"].astype(int).astype(str) + "-" + df["month"]
 
+    # 🔹 Flight 열을 숫자로 변환
+    flight_cols = ["Flight Arrival", "Flight Departure", "Flight Total"]
+    for col in flight_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
     # 🔹 Flight 이착륙 비율 계산
     df["Flight total_flights"] = df["Flight Arrival"] + df["Flight Departure"]
+    df["Flight total_flights"] = df["Flight total_flights"].replace(0, pd.NA)  # 0으로 나누는 문제 방지
+
     df["Flight arrival_ratio"] = df["Flight Arrival"] / df["Flight total_flights"]
     df["Flight departure_ratio"] = df["Flight Departure"] / df["Flight total_flights"]
 
