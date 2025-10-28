@@ -127,9 +127,9 @@ if uploaded_file is not None:
 
     st.altair_chart(chart, use_container_width=True)
 
-    # 🔹 데이터 미리보기
-    with st.expander("📄 데이터 미리보기"):
-        st.dataframe(df.head())
+    # 🔹 CSV 전체 데이터 표로 표시
+    st.header("📄 CSV 전체 데이터")
+    st.dataframe(df)  # 전체 데이터 표시
 
 else:
     st.info("👆 CSV 파일을 업로드하면 분석이 시작됩니다.")
