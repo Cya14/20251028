@@ -13,11 +13,8 @@ uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 
-    # 🔹 모든 열 이름을 소문자로 통일
-    df.columns = df.columns.str.lower().str.strip()
-
-    # 🔹 정확한 열 확인
-    expected_cols = ["year", "month", "flight", "arrival", "departure", "total", "cargo", "passengers"]
+    # 🔹 정확한 열 확인 (대소문자 포함 그대로)
+    expected_cols = ["year", "month", "Flight", "Arrival", "Departure", "Total", "Cargo", "Passengers"]
     if list(df.columns) != expected_cols:
         st.error(f"❌ CSV 열이 정확히 다음과 같아야 합니다:\n{', '.join(expected_cols)}")
         st.stop()
@@ -30,9 +27,9 @@ if uploaded_file is not None:
     df["year_month"] = df["year"].astype(str) + "-" + df["month"]
 
     # 🔹 비율 계산
-    df["total_flights"] = df["arrival"] + df["departure"]
-    df["arrival_ratio"] = df["arrival"] / df["total_flights"]
-    df["departure_ratio"] = df["departure"] / df["total_flights"]
+    df["total_flights"] = df["Arrival"] + df["Departure"]
+    df["arrival_ratio"] = df["Arrival"] / df["total_flights"]
+    df["departure_ratio"] = df["Departure"] / df["total_flights"]
 
     # 🔹 시각화 선택 옵션
     st.sidebar.header("⚙️ 그래프 설정")
@@ -44,7 +41,7 @@ if uploaded_file is not None:
         y_title = "비율"
         color_scheme = "set2"
     else:
-        chart_data = df[["year_month", "arrival", "departure"]].melt("year_month", var_name="Type", value_name="Count")
+        chart_data = df[["year_month", "Arrival", "Departure"]].melt("year_month", var_name="Type", value_name="Count")
         y_title = "횟수"
         color_scheme = "category10"
 
