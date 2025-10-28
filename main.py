@@ -16,12 +16,10 @@ if uploaded_file is not None:
     # 🔹 모든 열 이름을 소문자로 통일
     df.columns = df.columns.str.lower().str.strip()
 
-    # 🔹 열 존재 여부 확인
-    required_cols = ["year", "month", "flight", "passengers", "cargo", "arrival", "departure", "total"]
-    missing_cols = [col for col in required_cols if col not in df.columns]
-
-    if missing_cols:
-        st.error(f"❌ 다음 열이 없습니다: {missing_cols}")
+    # 🔹 정확한 열 확인
+    expected_cols = ["year", "month", "flight", "arrival", "departure", "total", "cargo", "passengers"]
+    if list(df.columns) != expected_cols:
+        st.error(f"❌ CSV 열이 정확히 다음과 같아야 합니다:\n{', '.join(expected_cols)}")
         st.stop()
 
     # 🔹 2012년 이후 데이터만 필터링
@@ -56,7 +54,7 @@ if uploaded_file is not None:
         .mark_line(point=True)
         .encode(
             x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y(f"value:Q", title=y_title),
+            y=alt.Y("value:Q", title=y_title),
             color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
             tooltip=["year_month", "Type", "value"]
         )
