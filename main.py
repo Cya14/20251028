@@ -44,8 +44,13 @@ if uploaded_file is not None:
     df["Flight arrival_ratio"] = df["Flight Arrival"] / df["Flight total_flights"]
     df["Flight departure_ratio"] = df["Flight Departure"] / df["Flight total_flights"]
 
-    # 🔹 NaN 제거 (Altair 안전 처리)
+    # 🔹 NaN 또는 무한대 제거
+    df = df.replace([float('inf'), -float('inf')], pd.NA)
     df_chart = df.dropna(subset=["Flight arrival_ratio", "Flight departure_ratio", "Flight total_flights"])
+
+    # 🔹 차트 생성 전 타입 강제
+    df_chart["Flight arrival_ratio"] = df_chart["Flight arrival_ratio"].astype(float)
+    df_chart["Flight departure_ratio"] = df_chart["Flight departure_ratio"].astype(float)
 
     # 🔹 시각화 선택 옵션
     st.sidebar.header("⚙️ 그래프 설정")
@@ -56,28 +61,42 @@ if uploaded_file is not None:
         chart_data = df_chart[["year_month", "Flight arrival_ratio", "Flight departure_ratio"]].melt(
             "year_month", var_name="Type", value_name="Ratio"
         )
+        chart_data["Ratio"] = chart_data["Ratio"].astype(float)
         y_title = "비율"
         color_scheme = "set2"
+
+        chart = (
+            alt.Chart(chart_data)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y("Ratio:Q", title=y_title),
+                color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
+                tooltip=["year_month", "Type", "Ratio"]
+            )
+            .properties(width=900, height=450)
+            .interactive()
+        )
     else:
         chart_data = df_chart[["year_month", "Flight Arrival", "Flight Departure"]].melt(
             "year_month", var_name="Type", value_name="Count"
         )
+        chart_data["Count"] = chart_data["Count"].astype(float)
         y_title = "횟수"
         color_scheme = "category10"
 
-    # 🔹 Altair 그래프 생성
-    chart = (
-        alt.Chart(chart_data)
-        .mark_line(point=True)
-        .encode(
-            x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y("value:Q", title=y_title),
-            color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
-            tooltip=["year_month", "Type", "value"]
+        chart = (
+            alt.Chart(chart_data)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y("Count:Q", title=y_title),
+                color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
+                tooltip=["year_month", "Type", "Count"]
+            )
+            .properties(width=900, height=450)
+            .interactive()
         )
-        .properties(width=900, height=450)
-        .interactive()
-    )
 
     st.altair_chart(chart, use_container_width=True)
 
