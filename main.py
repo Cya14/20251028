@@ -32,71 +32,95 @@ if uploaded_file is not None:
     df["month"] = df["month"].astype(str).str.zfill(2)
     df["year_month"] = df["year"].astype(int).astype(str) + "-" + df["month"]
 
-    # 🔹 Flight 열 숫자로 변환
-    flight_cols = ["Flight Arrival", "Flight Departure", "Flight Total"]
-    for col in flight_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    # 🔹 Flight / Passengers / Cargo 모든 열 숫자로 변환, NaN -> 0
+    for col in ["Flight Arrival", "Flight Departure", "Flight Total",
+                "Passengers Arrival", "Passengers Departure", "Passengers Total",
+                "Cargo Arrival", "Cargo Departure", "Cargo Total"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # 🔹 Flight 이착륙 비율 계산
+    # 🔹 Flight 비율 계산
     df["Flight total_flights"] = df["Flight Arrival"] + df["Flight Departure"]
-    df["Flight total_flights"] = df["Flight total_flights"].replace(0, pd.NA)
-
     df["Flight arrival_ratio"] = df["Flight Arrival"] / df["Flight total_flights"]
     df["Flight departure_ratio"] = df["Flight Departure"] / df["Flight total_flights"]
+    df.loc[df["Flight total_flights"] == 0, ["Flight arrival_ratio", "Flight departure_ratio"]] = 0
 
-    # 🔹 NaN 또는 무한대 제거
-    df = df.replace([float('inf'), -float('inf')], pd.NA)
-    df_chart = df.dropna(subset=["Flight arrival_ratio", "Flight departure_ratio", "Flight total_flights"])
+    # 🔹 Passengers 비율 계산
+    df["Passengers total"] = df["Passengers Arrival"] + df["Passengers Departure"]
+    df["Passengers arrival_ratio"] = df["Passengers Arrival"] / df["Passengers total"]
+    df["Passengers departure_ratio"] = df["Passengers Departure"] / df["Passengers total"]
+    df.loc[df["Passengers total"] == 0, ["Passengers arrival_ratio", "Passengers departure_ratio"]] = 0
 
-    # 🔹 차트 생성 전 타입 강제
-    df_chart["Flight arrival_ratio"] = df_chart["Flight arrival_ratio"].astype(float)
-    df_chart["Flight departure_ratio"] = df_chart["Flight departure_ratio"].astype(float)
+    # 🔹 Cargo 비율 계산
+    df["Cargo total"] = df["Cargo Arrival"] + df["Cargo Departure"]
+    df["Cargo arrival_ratio"] = df["Cargo Arrival"] / df["Cargo total"]
+    df["Cargo departure_ratio"] = df["Cargo Departure"] / df["Cargo total"]
+    df.loc[df["Cargo total"] == 0, ["Cargo arrival_ratio", "Cargo departure_ratio"]] = 0
 
     # 🔹 시각화 선택 옵션
     st.sidebar.header("⚙️ 그래프 설정")
-    view_mode = st.sidebar.selectbox("표시할 데이터", ["Flight 이착륙 비율", "Flight 이착륙 횟수"])
+    category = st.sidebar.selectbox("데이터 종류", ["Flight", "Passengers", "Cargo"])
+    view_mode = st.sidebar.selectbox("표시할 데이터", ["이착륙 비율", "이착륙 횟수"])
 
-    # 🔹 데이터 선택
-    if view_mode == "Flight 이착륙 비율":
-        chart_data = df_chart[["year_month", "Flight arrival_ratio", "Flight departure_ratio"]].melt(
-            "year_month", var_name="Type", value_name="Ratio"
-        )
-        chart_data["Ratio"] = chart_data["Ratio"].astype(float)
-        y_title = "비율"
-        color_scheme = "set2"
+    # 🔹 차트 데이터 선택
+    if category == "Flight":
+        if view_mode == "이착륙 비율":
+            chart_data = df[["year_month", "Flight arrival_ratio", "Flight departure_ratio"]].melt(
+                "year_month", var_name="Type", value_name="Ratio")
+            chart_data["Ratio"] = chart_data["Ratio"].astype(float)
+            y_title = "비율"
+            color_scheme = "set2"
+            y_field = "Ratio"
+        else:
+            chart_data = df[["year_month", "Flight Arrival", "Flight Departure"]].melt(
+                "year_month", var_name="Type", value_name="Count")
+            chart_data["Count"] = chart_data["Count"].astype(float)
+            y_title = "횟수"
+            color_scheme = "category10"
+            y_field = "Count"
+    elif category == "Passengers":
+        if view_mode == "이착륙 비율":
+            chart_data = df[["year_month", "Passengers arrival_ratio", "Passengers departure_ratio"]].melt(
+                "year_month", var_name="Type", value_name="Ratio")
+            chart_data["Ratio"] = chart_data["Ratio"].astype(float)
+            y_title = "비율"
+            color_scheme = "set2"
+            y_field = "Ratio"
+        else:
+            chart_data = df[["year_month", "Passengers Arrival", "Passengers Departure"]].melt(
+                "year_month", var_name="Type", value_name="Count")
+            chart_data["Count"] = chart_data["Count"].astype(float)
+            y_title = "횟수"
+            color_scheme = "category10"
+            y_field = "Count"
+    else:  # Cargo
+        if view_mode == "이착륙 비율":
+            chart_data = df[["year_month", "Cargo arrival_ratio", "Cargo departure_ratio"]].melt(
+                "year_month", var_name="Type", value_name="Ratio")
+            chart_data["Ratio"] = chart_data["Ratio"].astype(float)
+            y_title = "비율"
+            color_scheme = "set2"
+            y_field = "Ratio"
+        else:
+            chart_data = df[["year_month", "Cargo Arrival", "Cargo Departure"]].melt(
+                "year_month", var_name="Type", value_name="Count")
+            chart_data["Count"] = chart_data["Count"].astype(float)
+            y_title = "횟수"
+            color_scheme = "category10"
+            y_field = "Count"
 
-        chart = (
-            alt.Chart(chart_data)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
-                y=alt.Y("Ratio:Q", title=y_title),
-                color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
-                tooltip=["year_month", "Type", "Ratio"]
-            )
-            .properties(width=900, height=450)
-            .interactive()
+    # 🔹 Altair 그래프 생성
+    chart = (
+        alt.Chart(chart_data)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
+            y=alt.Y(f"{y_field}:Q", title=y_title),
+            color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
+            tooltip=["year_month", "Type", y_field]
         )
-    else:
-        chart_data = df_chart[["year_month", "Flight Arrival", "Flight Departure"]].melt(
-            "year_month", var_name="Type", value_name="Count"
-        )
-        chart_data["Count"] = chart_data["Count"].astype(float)
-        y_title = "횟수"
-        color_scheme = "category10"
-
-        chart = (
-            alt.Chart(chart_data)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X("year_month:N", title="연-월", axis=alt.Axis(labelAngle=-45)),
-                y=alt.Y("Count:Q", title=y_title),
-                color=alt.Color("Type:N", title="구분", scale=alt.Scale(scheme=color_scheme)),
-                tooltip=["year_month", "Type", "Count"]
-            )
-            .properties(width=900, height=450)
-            .interactive()
-        )
+        .properties(width=900, height=450)
+        .interactive()
+    )
 
     st.altair_chart(chart, use_container_width=True)
 
