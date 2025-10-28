@@ -3,126 +3,132 @@ import pandas as pd
 import altair as alt
 import io
 
-st.set_page_config(page_title="인천공항 이·착륙 비율", layout="centered")
-st.title("✈ 인천국제공항 이·착륙 비율 시각화")
-st.caption("업로드한 CSV 파일을 기반으로 Altair 시각화를 제공합니다. (별도 설치 불필요)")
+# -------------------------------
+# 페이지 기본 설정
+# -------------------------------
+st.set_page_config(page_title="인천공항 이·착륙 분석", layout="centered")
+st.title("✈ 인천국제공항 이·착륙 통계 시각화")
+st.caption("Altair 기반 자동 분석 (2012년 이후 데이터 기준)")
 
+# -------------------------------
+# 파일 업로드
+# -------------------------------
 uploaded = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"])
 if not uploaded:
     st.stop()
 
-# 파일 읽기
+# CSV 읽기
 try:
     df = pd.read_csv(uploaded)
 except Exception:
-    try:
-        df = pd.read_csv(uploaded, encoding="cp949")
-    except Exception as e:
-        st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
-        st.stop()
+    df = pd.read_csv(uploaded, encoding="cp949")
 
-st.success("파일 불러오기 성공 ✅")
+st.success("✅ 파일 불러오기 완료!")
 st.dataframe(df.head())
 
-# ---------- 자동 컬럼 인식 ----------
-def find_col(cols, keywords):
-    for c in cols:
-        for k in keywords:
-            if k.lower() in c.lower():
-                return c
-    return None
+# -------------------------------
+# 컬럼 이름 자동 표준화
+# -------------------------------
+df.columns = [c.strip().lower() for c in df.columns]
 
-cols = list(df.columns)
-
-year_col = find_col(cols, ["연도", "년도", "year"])
-month_col = find_col(cols, ["월", "month"])
-takeoff_col = find_col(cols, ["이륙", "출발", "departure", "takeoff"])
-landing_col = find_col(cols, ["착륙", "도착", "arrival", "landing"])
-airport_col = find_col(cols, ["공항", "airport"])
-
-missing = [x for x,y in {"연도":year_col, "월":month_col, "이륙":takeoff_col, "착륙":landing_col}.items() if y is None]
+expected_cols = ["year", "month", "flight", "passenger", "cargo", "arrive", "departure", "total"]
+missing = [c for c in expected_cols if c not in df.columns]
 if missing:
-    st.warning(f"다음 열을 자동으로 찾지 못했습니다: {missing}")
-    year_col = st.selectbox("연도 컬럼 선택", cols, index=0 if year_col is None else cols.index(year_col))
-    month_col = st.selectbox("월 컬럼 선택", cols, index=0 if month_col is None else cols.index(month_col))
-    takeoff_col = st.selectbox("이륙(출발) 컬럼 선택", cols, index=0 if takeoff_col is None else cols.index(takeoff_col))
-    landing_col = st.selectbox("착륙(도착) 컬럼 선택", cols, index=0 if landing_col is None else cols.index(landing_col))
-    airport_col = st.selectbox("공항 컬럼 선택 (없으면 생략 가능)", [None]+cols)
+    st.error(f"❌ 다음 필수 컬럼이 누락되어 있습니다: {missing}")
+    st.stop()
 
-df = df.rename(columns={
-    year_col: "연도",
-    month_col: "월",
-    takeoff_col: "이륙편수",
-    landing_col: "착륙편수",
-})
-if airport_col:
-    df = df.rename(columns={airport_col: "공항"})
+# -------------------------------
+# 데이터 전처리
+# -------------------------------
+df = df.copy()
+for c in ["year", "month"]:
+    df[c] = pd.to_numeric(df[c], errors="coerce")
 
-# ---------- 인천공항 필터 ----------
-if "공항" in df.columns:
-    mask = df["공항"].astype(str).str.contains("인천|Incheon", case=False, na=False)
-    df = df[mask]
-    st.info(f"인천공항 관련 데이터 {len(df)}건 추출 완료")
+# 2012년 이후 데이터만
+df = df[df["year"] >= 2012].sort_values(["year", "month"])
 
-# ---------- 전처리 ----------
-for col in ["연도", "월"]:
-    df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+# 숫자형 컬럼 변환
+for c in ["flight", "passenger", "cargo", "arrive", "departure", "total"]:
+    df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
-for col in ["이륙편수", "착륙편수"]:
-    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+# 연월 문자열
+df["년월"] = df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2)
 
-df["총편수"] = df["이륙편수"] + df["착륙편수"]
-df["년월"] = df["연도"].astype(str) + "-" + df["월"].astype(str)
+# -------------------------------
+# 시각화 1: 월별 이·착륙 추이
+# -------------------------------
+st.subheader("📈 월별 이·착륙 추이")
 
-# ---------- 시각화 ----------
-st.subheader("📊 월별 이·착륙 추이")
 trend = (
     alt.Chart(df)
-    .transform_fold(["이륙편수","착륙편수"], as_=["구분","편수"])
+    .transform_fold(["arrive", "departure"], as_=["구분", "편수"])
     .mark_line(point=True)
     .encode(
-        x=alt.X("년월:N", sort=None),
-        y="편수:Q",
-        color="구분:N",
-        tooltip=["연도","월","구분","편수"]
+        x=alt.X("년월:N", sort=None, title=None),
+        y=alt.Y("편수:Q", title="편수"),
+        color=alt.Color("구분:N", title="구분", scale=alt.Scale(scheme="set1")),
+        tooltip=["year", "month", "구분", "편수"]
     )
-    .properties(height=400)
+    .properties(height=400, title="월별 이·착륙 추이 (2012년 이후)")
 )
 st.altair_chart(trend, use_container_width=True)
 
-# ---------- 비율 도넛 ----------
-latest_year = int(df["연도"].max())
-latest_df = df[df["연도"] == latest_year]
-takeoff_sum = latest_df["이륙편수"].sum()
-landing_sum = latest_df["착륙편수"].sum()
+# -------------------------------
+# 시각화 2: 최신 연도 이·착륙 비율 도넛
+# -------------------------------
+latest_year = int(df["year"].max())
+st.subheader(f"🍩 {latest_year}년 이·착륙 비율")
+
+latest = df[df["year"] == latest_year]
+sum_arrive = latest["arrive"].sum()
+sum_depart = latest["departure"].sum()
+
 donut_df = pd.DataFrame({
-    "구분":["이륙편수","착륙편수"],
-    "편수":[takeoff_sum, landing_sum]
+    "구분": ["도착(arrive)", "출발(departure)"],
+    "편수": [sum_arrive, sum_depart]
 })
 
-st.subheader(f"🍩 {latest_year}년 이·착륙 비율")
 donut = (
     alt.Chart(donut_df)
     .mark_arc(innerRadius=60)
     .encode(
         theta="편수:Q",
         color=alt.Color("구분:N", scale=alt.Scale(scheme="set2")),
-        tooltip=["구분","편수"]
+        tooltip=["구분", "편수"]
     )
+    .properties(width=400, height=400, title=f"{latest_year}년 이·착륙 비율")
 )
 st.altair_chart(donut, use_container_width=True)
+st.metric(f"{latest_year}년 총편수", f"{(sum_arrive + sum_depart):,}편")
 
-# ---------- 월별 막대 ----------
-st.subheader(f"📅 {latest_year}년 월별 총편수")
+# -------------------------------
+# 시각화 3: 월별 총편수 막대 그래프
+# -------------------------------
+st.subheader(f"📊 {latest_year}년 월별 총편수")
+
 bar = (
-    alt.Chart(latest_df)
-    .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+    alt.Chart(latest)
+    .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
     .encode(
-        x="월:O",
-        y="총편수:Q",
-        color=alt.Color("월:O", scale=alt.Scale(scheme="blues")),
-        tooltip=["월","총편수"]
+        x=alt.X("month:O", title="월"),
+        y=alt.Y("total:Q", title="총편수"),
+        color=alt.Color("month:O", scale=alt.Scale(scheme="blues")),
+        tooltip=["year", "month", "total"]
     )
-    .properties(height=400)
+    .properties(height=400, title=f"{latest_year}년 월별 총편수")
 )
 st.altair_chart(bar, use_container_width=True)
+
+# -------------------------------
+# 데이터 확인 및 다운로드
+# -------------------------------
+with st.expander("📂 데이터 확인"):
+    st.dataframe(df.tail())
+
+csv_buf = df.to_csv(index=False).encode("utf-8-sig")
+st.download_button(
+    "🔽 처리된 데이터 다운로드 (CSV)",
+    data=csv_buf,
+    file_name="incheon_airport_processed.csv",
+    mime="text/csv"
+)
