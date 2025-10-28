@@ -20,12 +20,11 @@ if uploaded_file is not None:
         "Passengers Arrival", "Passengers Departure", "Passengers Total",
         "Cargo Arrival", "Cargo Departure", "Cargo Total"
     ]
-
     if list(df.columns) != expected_cols:
         st.error(f"❌ CSV 열이 정확히 다음과 같아야 합니다:\n{', '.join(expected_cols)}")
         st.stop()
 
-    # 🔹 year를 숫자로 변환 (변환 불가 시 NaN 처리)
+    # 🔹 year를 숫자로 변환
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
     df = df[df["year"].notna() & (df["year"] >= 2012)]
 
@@ -33,17 +32,20 @@ if uploaded_file is not None:
     df["month"] = df["month"].astype(str).str.zfill(2)
     df["year_month"] = df["year"].astype(int).astype(str) + "-" + df["month"]
 
-    # 🔹 Flight 열을 숫자로 변환
+    # 🔹 Flight 열 숫자로 변환
     flight_cols = ["Flight Arrival", "Flight Departure", "Flight Total"]
     for col in flight_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # 🔹 Flight 이착륙 비율 계산
     df["Flight total_flights"] = df["Flight Arrival"] + df["Flight Departure"]
-    df["Flight total_flights"] = df["Flight total_flights"].replace(0, pd.NA)  # 0으로 나누는 문제 방지
+    df["Flight total_flights"] = df["Flight total_flights"].replace(0, pd.NA)
 
     df["Flight arrival_ratio"] = df["Flight Arrival"] / df["Flight total_flights"]
     df["Flight departure_ratio"] = df["Flight Departure"] / df["Flight total_flights"]
+
+    # 🔹 NaN 제거 (Altair 안전 처리)
+    df_chart = df.dropna(subset=["Flight arrival_ratio", "Flight departure_ratio", "Flight total_flights"])
 
     # 🔹 시각화 선택 옵션
     st.sidebar.header("⚙️ 그래프 설정")
@@ -51,13 +53,13 @@ if uploaded_file is not None:
 
     # 🔹 데이터 선택
     if view_mode == "Flight 이착륙 비율":
-        chart_data = df[["year_month", "Flight arrival_ratio", "Flight departure_ratio"]].melt(
+        chart_data = df_chart[["year_month", "Flight arrival_ratio", "Flight departure_ratio"]].melt(
             "year_month", var_name="Type", value_name="Ratio"
         )
         y_title = "비율"
         color_scheme = "set2"
     else:
-        chart_data = df[["year_month", "Flight Arrival", "Flight Departure"]].melt(
+        chart_data = df_chart[["year_month", "Flight Arrival", "Flight Departure"]].melt(
             "year_month", var_name="Type", value_name="Count"
         )
         y_title = "횟수"
