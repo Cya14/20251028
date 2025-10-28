@@ -2,67 +2,115 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 
-# ----------------------------
-# 1️⃣ 페이지 기본 설정
-# ----------------------------
-st.set_page_config(
-    page_title="국가별 유형 분석",
-    page_icon="🌍",
-    layout="wide"
-)
+# -----------------------------
+# 기본 설정
+# -----------------------------
+st.set_page_config(page_title="인천공항 이착륙 통계", layout="centered")
+st.title("✈️ 인천국제공항 이·착륙 통계 대시보드")
+st.caption("엑셀 데이터를 업로드하면 자동으로 시각화됩니다 (Altair 기반).")
 
-st.title("🌍 특정 유형이 높은 국가 TOP 10")
-st.write("아래에서 분석할 **유형(Type)** 을 선택하세요.")
+# -----------------------------
+# 엑셀 파일 업로드
+# -----------------------------
+uploaded_file = st.file_uploader("📂 인천공항 이착륙 통계 엑셀 파일을 업로드하세요 (.xlsx)", type=["xlsx"])
 
-# ----------------------------
-# 2️⃣ 예시 데이터 준비
-# ----------------------------
-data = {
-    "Country": ["Korea", "Japan", "USA", "Germany", "France", "Brazil", "Canada", "India", "China", "UK",
-                "Italy", "Spain", "Mexico", "Australia", "Russia"],
-    "Type_A": [85, 78, 92, 80, 77, 70, 82, 88, 91, 75, 73, 69, 71, 79, 68],
-    "Type_B": [45, 50, 60, 55, 70, 65, 48, 75, 68, 57, 62, 64, 66, 53, 59],
-    "Type_C": [30, 40, 38, 45, 33, 28, 35, 50, 49, 29, 27, 31, 32, 36, 37]
-}
+if uploaded_file is None:
+    st.info("예시 형식: 연도, 월, 이륙편수, 착륙편수 컬럼이 포함된 Excel 파일을 업로드해주세요.")
+    st.stop()
 
-df = pd.DataFrame(data)
+# -----------------------------
+# 데이터 불러오기
+# -----------------------------
+try:
+    df = pd.read_excel(uploaded_file)
+except Exception as e:
+    st.error(f"파일을 불러오는 중 오류가 발생했습니다: {e}")
+    st.stop()
 
-# ----------------------------
-# 3️⃣ 사용자 입력 (유형 선택)
-# ----------------------------
-type_list = [col for col in df.columns if col != "Country"]
-selected_type = st.selectbox("유형을 선택하세요:", type_list)
+# -----------------------------
+# 컬럼 확인 및 전처리
+# -----------------------------
+required_cols = {"연도", "월", "이륙편수", "착륙편수"}
+if not required_cols.issubset(df.columns):
+    st.error(f"파일에 {required_cols} 컬럼이 모두 포함되어야 합니다.")
+    st.stop()
 
-# ----------------------------
-# 4️⃣ 상위 10개 국가 필터링
-# ----------------------------
-top10 = (
-    df[["Country", selected_type]]
-    .sort_values(by=selected_type, ascending=False)
-    .head(10)
-)
+df = df.copy()
+df["총편수"] = df["이륙편수"] + df["착륙편수"]
+df["년월"] = df["연도"].astype(str) + "년 " + df["월"].astype(str) + "월"
 
-# ----------------------------
-# 5️⃣ Altair 시각화
-# ----------------------------
-chart = (
-    alt.Chart(top10)
-    .mark_bar(cornerRadiusTopRight=8, cornerRadiusBottomRight=8)
+# -----------------------------
+# 그래프 1️⃣ : 월별 이착륙 추이
+# -----------------------------
+st.subheader("📈 월별 이·착륙 추이")
+
+trend_chart = (
+    alt.Chart(df)
+    .transform_fold(["이륙편수", "착륙편수"], as_=["구분", "편수"])
+    .mark_line(point=True)
     .encode(
-        x=alt.X(f"{selected_type}:Q", title=f"{selected_type} 점수"),
-        y=alt.Y("Country:N", sort='-x', title="국가"),
-        color=alt.Color(f"{selected_type}:Q", scale=alt.Scale(scheme="tealblues")),
-        tooltip=["Country", selected_type]
+        x=alt.X("년월:N", sort=None, title=None),
+        y=alt.Y("편수:Q", title="편수"),
+        color=alt.Color("구분:N", scale=alt.Scale(scheme="tableau10")),
+        tooltip=["연도", "월", "구분", "편수"]
     )
-    .properties(
-        width=700,
-        height=400,
-        title=f"🌟 {selected_type} 유형이 높은 국가 TOP 10"
-    )
+    .properties(height=400, title="인천공항 월별 이착륙 추이")
 )
 
-# ----------------------------
-# 6️⃣ 결과 표시
-# ----------------------------
-st.altair_chart(chart, use_container_width=True)
-st.dataframe(top10, use_container_width=True)
+st.altair_chart(trend_chart, use_container_width=True)
+
+# -----------------------------
+# 그래프 2️⃣ : 최근 연도 도넛 차트
+# -----------------------------
+latest_year = df["연도"].max()
+latest_data = df[df["연도"] == latest_year]
+
+st.subheader(f"🟢 {latest_year}년 이·착륙 비율")
+
+donut_df = pd.DataFrame({
+    "구분": ["이륙편수", "착륙편수"],
+    "편수": [latest_data["이륙편수"].sum(), latest_data["착륙편수"].sum()]
+})
+
+donut_chart = (
+    alt.Chart(donut_df)
+    .mark_arc(innerRadius=60, outerRadius=120)
+    .encode(
+        theta="편수:Q",
+        color=alt.Color("구분:N", scale=alt.Scale(scheme="set2")),
+        tooltip=["구분", "편수"]
+    )
+    .properties(width=400, height=400, title=f"{latest_year}년 이·착륙 비율")
+)
+
+st.altair_chart(donut_chart, use_container_width=True)
+
+st.metric(
+    f"{latest_year}년 총편수",
+    f"{(donut_df['편수'].sum()):,}편"
+)
+
+# -----------------------------
+# 그래프 3️⃣ : 월별 총편수 막대그래프
+# -----------------------------
+st.subheader(f"📊 {latest_year}년 월별 총편수 추이")
+
+bar_chart = (
+    alt.Chart(latest_data)
+    .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+    .encode(
+        x=alt.X("월:O", title="월"),
+        y=alt.Y("총편수:Q", title="총편수"),
+        color=alt.Color("월:O", scale=alt.Scale(scheme="blues")),
+        tooltip=["연도", "월", "총편수"]
+    )
+    .properties(height=400, title=f"{latest_year}년 월별 총편수 변화")
+)
+
+st.altair_chart(bar_chart, use_container_width=True)
+
+# -----------------------------
+# 데이터 표
+# -----------------------------
+with st.expander("📄 원본 데이터 보기"):
+    st.dataframe(df.style.format({"이륙편수": "{:,}", "착륙편수": "{:,}", "총편수": "{:,}"}))
